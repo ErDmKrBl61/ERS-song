@@ -1,0 +1,800 @@
+using AxWMPLib;
+using System;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Windows.Forms;
+using NAudio.Wave;
+using System.Collections.Generic;
+using Bunifu.Framework.UI;
+using Microsoft.Reporting.WinForms;
+using System.Runtime.InteropServices;
+
+namespace ERS
+{
+
+    public partial class ERS : Form
+    {
+        int mouse_click_count;
+        int soundclick = 0;
+        int Mov;
+        int mx;
+        int my;
+        public EventHandler onAction = null;
+        public ERS()
+        {
+            InitializeComponent();
+            this.KeyPreview = true;
+            this.KeyDown += new KeyEventHandler(Form1_KeyDown);
+            playline.MouseWheel += new MouseEventHandler(playline_MouseWheel);
+            axWindowsMediaPlayer1.settings.volume = 100;
+            timer1.Start();
+        }
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+        private void taşıma_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left && this.WindowState != FormWindowState.Maximized)
+            {
+                if (e.Location.Y <= 40)
+                {
+                    this.WindowState = FormWindowState.Maximized;
+                }
+            }
+        }
+        int mouseDoubleClick = 0;
+        DateTime lastClickTime = DateTime.Now;
+        private void taşıma_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left && this.WindowState != FormWindowState.Maximized)
+            {
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+            DateTime now = DateTime.Now;
+            TimeSpan timeSinceLastClick = now - lastClickTime;
+
+            if (timeSinceLastClick.TotalMilliseconds < 2000 && mouseDoubleClick == 1)
+            {
+                if (this.WindowState == FormWindowState.Normal)
+                {
+                    this.WindowState = FormWindowState.Maximized;
+                }
+                else if (this.WindowState == FormWindowState.Maximized)
+                {
+                    this.WindowState = FormWindowState.Normal;
+                }
+            }
+            mouseDoubleClick++;
+            if (timeSinceLastClick.TotalMilliseconds > 2000)
+            {
+                mouseDoubleClick = 0;
+            }
+            lastClickTime = now;
+        }
+        public void stopplyer()
+        {
+            axWindowsMediaPlayer1.Ctlcontrols.stop();
+        }
+        private void btnformuküçült_Click(object sender, EventArgs e)
+        {
+            this.WindowState = FormWindowState.Minimized;
+        }
+        private void btnformukapat_Click(object sender, EventArgs e)
+        {
+            System.Windows.Forms.Application.Exit();
+        }
+        private bool playing = false;
+        private string lastSelectedSongPath = null;
+        private double lastPosition = 0;
+        private void btnaction_Click(object sender, EventArgs e)
+        {
+            if (TbCntrl.SelectedTab != null && TbCntrl.SelectedTab.Controls.Count > 0)
+            {
+                ListBox listBox = (ListBox)TbCntrl.SelectedTab.Controls[0];
+                if (listBox.SelectedItem != null)
+                {
+                    string selectedSongPath = System.IO.Path.Combine(@"C:\" + TxtKlasör.Text, TbCntrl.SelectedTab.Text, listBox.SelectedItem.ToString());
+
+                    if (selectedSongPath != lastSelectedSongPath)
+                    {
+                        lastSelectedSongPath = selectedSongPath;
+                        lastPosition = 0; // Reset last position when the song changes
+                    }
+                    // If the media player is currently playing
+                    if (playing)
+                    {
+                        // Pause the media player, save the current position, and change the button image and tooltip to "başlat"
+                        axWindowsMediaPlayer1.Ctlcontrols.pause();
+                        lastPosition = axWindowsMediaPlayer1.Ctlcontrols.currentPosition;
+                        playing = false;
+                    }
+                    else
+                    {
+                        // Start playing the selected song, set the saved position if available, and change the button image and tooltip to "durdur"
+                        axWindowsMediaPlayer1.URL = selectedSongPath;
+                        if (lastPosition > 0)
+                        {
+                            axWindowsMediaPlayer1.Ctlcontrols.currentPosition = lastPosition;
+                        }
+                        axWindowsMediaPlayer1.Ctlcontrols.play();
+                        playing = true;
+                    }
+                }
+            }
+        }
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            if (axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPlaying)
+            {
+                startlable.Text = axWindowsMediaPlayer1.Ctlcontrols.currentPositionString;
+                endlabel.Text = axWindowsMediaPlayer1.Ctlcontrols.currentItem.durationString.ToString();
+                if (!playline.Focused)
+                {
+                    playline.Value = (int)axWindowsMediaPlayer1.Ctlcontrols.currentPosition;
+                }
+            }
+        }     
+        private List<string> playlist = new List<string>(); // Çalma listesi
+        private void listbox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ListBox lb = (ListBox)sender;
+            int selectedIndex = lb.SelectedIndex;
+
+            // Check if there are any items in the playlist
+            if (playlist.Count > 0)
+            {
+                // Check if the selected index is valid
+                if (selectedIndex >= 0 && selectedIndex < playlist.Count)
+                {
+                    // Get the path of the selected song and play it
+                    string selectedSong = playlist[selectedIndex];
+                    axWindowsMediaPlayer1.URL = selectedSong;
+                }
+            }
+        }
+        private bool soundActive = false;
+        private void soundaction_Click(object sender, EventArgs e)
+        {
+            soundclick++;
+            if (soundclick % 2 == 1)
+            {
+                axWindowsMediaPlayer1.settings.mute = true;
+            }
+            else
+            {
+                axWindowsMediaPlayer1.settings.mute = false;
+            }
+            if (soundActive)
+            {
+                soundActive = false;
+                soundline.Value = 5;
+                soundlable.Text = "5";
+            }
+            else
+            {
+                soundline.Value = 0;
+                soundlable.Text = "0";
+                soundActive = true;
+            }
+        }
+        private double durmapozisyonu = 0;
+        private bool isPlaying = false;
+        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == System.Windows.Forms.Keys.F2)
+            {
+                WindowState = FormWindowState.Minimized;
+            }
+            if (e.KeyCode == System.Windows.Forms.Keys.Q)
+            {
+                System.Windows.Forms.Application.Exit();
+            }
+            if (e.KeyCode == System.Windows.Forms.Keys.E)
+            {
+                if (!isPlaying)
+                {
+                    axWindowsMediaPlayer1.Ctlcontrols.currentPosition = durmapozisyonu;
+                    axWindowsMediaPlayer1.Ctlcontrols.play();
+                    isPlaying = true;
+                }
+            }
+            if (e.KeyCode == System.Windows.Forms.Keys.R)
+            {
+                if (isPlaying)
+                {
+                    axWindowsMediaPlayer1.Ctlcontrols.pause();
+                    durmapozisyonu = axWindowsMediaPlayer1.Ctlcontrols.currentPosition;
+                    isPlaying = false;
+                }
+            }
+            int y = (int)(playline.Maximum / 100);
+            if (axWindowsMediaPlayer1.Ctlcontrols.currentPosition < (double)playline.Maximum - y)
+            {
+                if (e.KeyCode == System.Windows.Forms.Keys.Right)
+                {
+                    if (axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPlaying)
+                    {
+                        playline.Value = (int)(axWindowsMediaPlayer1.Ctlcontrols.currentPosition);
+                        axWindowsMediaPlayer1.Ctlcontrols.currentPosition = (axWindowsMediaPlayer1.Ctlcontrols.currentPosition + y);
+                    }
+                }
+            }
+
+            if (axWindowsMediaPlayer1.Ctlcontrols.currentPosition > y)
+            {
+                if (e.KeyCode == System.Windows.Forms.Keys.Left)
+                {
+                    if (axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPlaying)
+                    {
+                        playline.Value = (int)(axWindowsMediaPlayer1.Ctlcontrols.currentPosition);
+                        axWindowsMediaPlayer1.Ctlcontrols.currentPosition = (axWindowsMediaPlayer1.Ctlcontrols.currentPosition - y);
+                    }
+                }
+            }
+        }
+        bool _playing = false;
+        public bool isplaying
+        {
+            get
+            {
+                return _playing;
+            }
+            set
+            {
+                _playing = value;
+                if (_playing)
+                {
+                    axWindowsMediaPlayer1.Ctlcontrols.pause();
+                }
+                else
+                {
+                    axWindowsMediaPlayer1.Ctlcontrols.play();
+
+                }
+            }
+        }
+        public MouseEventHandler ERS_MouseWheel { get; private set; }
+        private bool isFormExpanded = false;
+        public Image AlbümKapakResmi { get; set; }
+        private void listbox1_DoubleClick(object sender, EventArgs e)
+        {
+
+            if (TbCntrl.SelectedTab != null && TbCntrl.SelectedTab.Controls.Count > 0)
+            {
+                ListBox listBox = (ListBox)TbCntrl.SelectedTab.Controls[0];
+                if (listBox.SelectedItem != null)
+                {
+                    string selectedSongPath = System.IO.Path.Combine(@"C:\" + TxtKlasör.Text, TbCntrl.SelectedTab.Text, listBox.SelectedItem.ToString());
+                    axWindowsMediaPlayer1.URL = selectedSongPath;
+                }
+            }
+        }
+        DateTime lastClick = DateTime.Now; // son tıklama zamanı
+        bool isFullScreen = false; // tam ekran modu açık mı?
+        private void ERS_Load(object sender, EventArgs e)
+        {
+            timer1.Start();
+            axWindowsMediaPlayer1.SendToBack();
+            PerformClick(btnara);
+        }
+        private void playline_ValueChanged_1(object sender, EventArgs e)
+        {
+            axWindowsMediaPlayer1.Ctlcontrols.currentPosition = (int)playline.Value;
+        }
+        private void playline_Scroll(object sender, ScrollEventArgs e)
+        {
+            if (axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPlaying || axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPaused)
+            {
+                axWindowsMediaPlayer1.Ctlcontrols.currentPosition = (int)playline.Value;
+                ThreadPool.QueueUserWorkItem(delegate { axWindowsMediaPlayer1.Ctlcontrols.play(); });
+            }
+        }
+        private void axWindowsMediaPlayer1_ClickEvent_1(object sender, _WMPOCXEvents_ClickEvent e)
+        {
+            if (e.nButton == 1)
+            {
+                mouse_click_count++;
+
+                if (mouse_click_count % 2 == 1)
+                {
+                    isplaying = true;
+                }
+                else
+                {
+                    isplaying = false;
+                }
+                if (mouse_click_count % 2 == 2)
+                {
+                    MaximizeBox = false;
+                }
+            }
+        }
+        private void axWindowsMediaPlayer1_PositionChange_1(object sender, _WMPOCXEvents_PositionChangeEvent e)
+        {
+            playline.Maximum = (int)axWindowsMediaPlayer1.currentMedia.duration;
+        }
+        private void axWindowsMediaPlayer1_MediaError_1(object sender, _WMPOCXEvents_MediaErrorEvent e)
+        {
+            try
+            {
+                WMPLib.IWMPMedia2 errsource = e.pMediaObject as WMPLib.IWMPMedia2;
+                WMPLib.IWMPErrorItem erroritem = errsource.Error;
+                MessageBox.Show("Error" + erroritem.errorCode.ToString("X") + "in" + errsource.sourceURL);
+
+            }
+            catch (InvalidCastException)
+            {
+                MessageBox.Show("Error.");
+            }
+        }
+        private void axWindowsMediaPlayer1_DoubleClickEvent_1(object sender, _WMPOCXEvents_DoubleClickEvent e)
+        {
+            axWindowsMediaPlayer1.uiMode = "none";
+        }
+        private void playline_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                int currentPosition = (int)playline.Value;
+                int newPosition = currentPosition + Math.Sign(e.Delta) * (int)playline.LargeChange;
+                newPosition = Math.Max(newPosition, (int)playline.Minimum);
+                newPosition = Math.Min(newPosition, (int)playline.Maximum);
+                playline.Value = newPosition;
+                /* axWindowsMediaPlayer1.Ctlcontrols.currentPosition = newPosition;
+                 soundline.GetType().GetMethod("OnMouseDown",
+                 BindingFlags.NonPublic | BindingFlags.Instance)
+                .Invoke(soundline, new object[] { e });*/
+
+            }
+            int x = e.X;
+            int width = playline.Size.Width;
+            double duration = axWindowsMediaPlayer1.currentMedia.duration;
+            double pos = duration * x / width;
+            axWindowsMediaPlayer1.Ctlcontrols.currentPosition = pos;
+            playline.Value = (int)axWindowsMediaPlayer1.Ctlcontrols.currentPosition;
+        }
+        private void playline_MouseUp(object sender, MouseEventArgs e)
+        {
+
+            axWindowsMediaPlayer1.Ctlcontrols.currentPosition = (int)playline.Value;
+        }
+        private void playline_MouseEnter(object sender, EventArgs e)
+        {
+            this.Focus();
+        }
+        private void playline_MouseWheel(object sender, MouseEventArgs e)
+        {
+            // Kaydırma tekerleği ile kaydırma yapılırsa değer değişmemesi için kontrol edilir
+            if (e.Delta != 0)
+            {
+                int currentPosition = (int)playline.Value;
+                int newPosition = currentPosition + Math.Sign(e.Delta) * (int)playline.LargeChange;
+                newPosition = Math.Max(newPosition, (int)playline.Minimum);
+                newPosition = Math.Min(newPosition, (int)playline.Maximum);
+                playline.Value = newPosition;
+                axWindowsMediaPlayer1.Ctlcontrols.currentPosition = newPosition;
+            }
+        }
+        private int currentSongIndex = 0;
+        private void axWindowsMediaPlayer1_PlayStateChange(object sender, _WMPOCXEvents_PlayStateChangeEvent e)
+        {
+            if (e.newState == (int)WMPLib.WMPPlayState.wmppsPlaying)
+            {
+                tmrsarkikontrl.Stop();
+                tmrsarkikontrl.Enabled = false;
+                timer1.Start();
+                songname.Text = axWindowsMediaPlayer1.currentMedia.name;
+                playline.Maximum = (int)axWindowsMediaPlayer1.currentMedia.duration;
+                isPlaying = true;
+                string currentSongPath = axWindowsMediaPlayer1.URL;
+                TagLib.File file = TagLib.File.Create(currentSongPath);
+                TagLib.IPicture albumArt = file.Tag.Pictures.FirstOrDefault();
+                if (albumArt != null)
+                {
+                    MemoryStream ms = new MemoryStream(albumArt.Data.Data);
+                    System.Drawing.Image albumArtImage = System.Drawing.Image.FromStream(ms);
+                    pbAlbumCover.Image = albumArtImage;
+                    pbAlbumCover.SizeMode = PictureBoxSizeMode.StretchImage;
+                }
+            }
+            else if (e.newState == (int)WMPLib.WMPPlayState.wmppsPaused)
+            {
+                timer1.Stop();
+                isPlaying = false;
+            }
+            else if (e.newState == (int)WMPLib.WMPPlayState.wmppsStopped)
+            {
+                playline.Value = 0;
+                axWindowsMediaPlayer1.URL = "";
+                // increment the current song index and play the next song
+                int selectedTabIndex = TbCntrl.SelectedIndex;
+                ListBox currentListBox = (ListBox)TbCntrl.TabPages[selectedTabIndex].Controls[0];
+                currentSongIndex++;
+                if (currentSongIndex < currentListBox.Items.Count)
+                {
+                    string songName = currentListBox.Items[currentSongIndex].ToString();
+                    string[] files = Directory.GetFiles(@"C:\Müzikler\", "*.mp3", SearchOption.AllDirectories)
+                        .Where(s => s.Contains(songName)).ToArray();
+                    if (files.Length > 0)
+                    {
+                        axWindowsMediaPlayer1.URL = files[0];
+                        axWindowsMediaPlayer1.Ctlcontrols.play();
+                    }
+                }
+            }
+        }
+        private void performclick(Button btn)
+        {
+            btn.Focus();
+            btn.PerformClick();
+        }
+        private void soundline_ValueChanged(object sender, EventArgs e)
+        {
+            axWindowsMediaPlayer1.settings.volume = (int)soundline.Value;
+            soundlable.Text = soundline.Value.ToString();
+        }
+        private bool isFirstTime = true;
+        private void playline_ValueChanged(object sender, EventArgs e)
+        {
+            if (isFirstTime)
+            {
+                // playline'ın yeni değerini al
+                double newPosition = (double)playline.Value;
+
+                // axWindowsMediaPlayer nesnesinin mevcut pozisyonunu güncelle
+                axWindowsMediaPlayer1.Ctlcontrols.currentPosition = newPosition;
+
+                isFirstTime = false;
+            }
+        }
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            if (axWindowsMediaPlayer1.playState == WMPLib.WMPPlayState.wmppsPlaying)
+            {
+                playline.Value = (int)axWindowsMediaPlayer1.Ctlcontrols.currentPosition;
+            }
+        }
+        private bool tekrarlaActive = false;
+        private void btntkrrkontrl_Click(object sender, EventArgs e)
+        {
+            if (tekrarlaActive)
+            {
+                axWindowsMediaPlayer1.settings.setMode("loop", true);
+
+                toolTip1.SetToolTip(btnkrstkontrl, "tekrarla");
+                tekrarlaActive = false;
+            }
+            else
+            {
+                axWindowsMediaPlayer1.settings.setMode("loop", false);
+
+                toolTip1.SetToolTip(btnkrstkontrl, "tekrarlama");
+                tekrarlaActive = true;
+            }
+        }
+        private bool karistiractive = false;
+        private void btnkrstkontrl_Click(object sender, EventArgs e)
+        {
+            if (karistiractive)
+            {
+                toolTip1.SetToolTip(btnkrstkontrl, "karıştır");
+                karistiractive = false;
+
+            }
+            else
+            {
+                toolTip1.SetToolTip(btnkrstkontrl, "karıştırma");
+                karistiractive = true;
+            }
+        }
+        private void btnara_Click_1(object sender, EventArgs e)
+        {
+            string[] klasorler = Directory.GetDirectories(@"C:\Müzikler");
+            int i = 0;
+            if (klasorler.Length != 0)
+            {
+                foreach (string aktifklasor in klasorler)
+                {
+                    i++;
+                    TabPage tp = new TabPage("tp" + i);
+                    TbCntrl.TabPages.Add(tp);
+                    ListBox listbox1 = new ListBox();
+                    listbox1.DoubleClick += new EventHandler(listbox1_DoubleClick);
+                    listbox1.Size = new System.Drawing.Size(500, 380);
+                    listbox1.BackColor = System.Drawing.Color.Black;
+                    listbox1.ForeColor = System.Drawing.Color.White;
+                    TbCntrl.TabPages[i].Text = System.IO.Path.GetFileName(aktifklasor);
+                    string[] dosyalar = Directory.GetFiles(aktifklasor, "*.mp3", SearchOption.AllDirectories);
+                    foreach (string aktifdosya in dosyalar)
+                    {
+                        string item = (System.IO.Path.GetFileName(aktifdosya));
+                        listbox1.Items.Add(item);
+                    }
+                    TbCntrl.TabPages[i].Controls.Add(listbox1);
+                    TbCntrl.TabPages[i].ForeColor = System.Drawing.Color.White;
+                }
+                TbCntrl.TabPages.RemoveAt(0);
+                int selectedTabIndex = TbCntrl.SelectedIndex;
+                Panel4.Controls.Clear();
+                ListBox currentListBox = (ListBox)TbCntrl.TabPages[selectedTabIndex].Controls[0];
+                int spacing = 4; // boşluk miktarı
+                for (int k = 0; k < currentListBox.Items.Count; k++)
+                {
+                    PictureBox pbsanatci = new PictureBox();
+                    Label baslik = new Label();
+                    ERS_Panel pnlsarki = new ERS_Panel();
+                    pnlsarki.Angle = 180;
+                    pnlsarki.Location = new System.Drawing.Point(20, k * (pnlsarki.Height + spacing));
+                    pnlsarki.Size = new System.Drawing.Size(1045, 86);
+                    pnlsarki.StartColor = System.Drawing.Color.DimGray;
+                    pnlsarki.Click += new EventHandler(pnlsarki_Click);
+                    pnlsarki.MouseEnter += new EventHandler(pnlsarki_MouseEnter);
+                    pnlsarki.MouseLeave += new EventHandler(pnlsarki_MouseLeave);
+                    pnlsarki.EndColor = System.Drawing.Color.Black;
+                    pnlsarki.Cursor = Cursors.Hand;
+                    baslik.Text = currentListBox.Items[k].ToString();
+                    BunifuElipse elips = new BunifuElipse();
+                    elips.TargetControl = pnlsarki;
+                    elips.ElipseRadius = 30;
+                    baslik.AutoSize = true;
+                    baslik.ForeColor = System.Drawing.Color.White;
+                    baslik.BackColor = System.Drawing.Color.Transparent;
+                    baslik.Font = new Font("Georgia", 12, FontStyle.Regular);
+                    baslik.Location = new Point(pbsanatci.Right + 10, (pnlsarki.Height - baslik.Height) / 2);
+                    pnlsarki.Controls.Add(baslik);
+                    pnlsarki.Controls.Add(pbsanatci);
+                    Panel4.Controls.Add(pnlsarki);
+                    foreach (Control control in Panel4.Controls)
+                    {
+                        if (control is ERS_Panel)
+                        {
+                            ERS_Panel panel = (ERS_Panel)control;
+                            foreach (Control subControl in panel.Controls)
+                            {
+                                if (subControl is PictureBox)
+                                {
+                                    PictureBox pictureBox = (PictureBox)subControl;
+                                    string songname = panel.Controls.OfType<Label>().FirstOrDefault().Text;
+                                    string[] files = Directory.GetFiles(@"C:\Müzikler\", "*.mp3", SearchOption.AllDirectories)
+                                        .Where(s => s.Contains(songname)).ToArray();
+                                    if (files.Length > 0)
+                                    {
+                                        TagLib.File file = TagLib.File.Create(files[0]);
+                                        MemoryStream ms = new MemoryStream(file.Tag.Pictures[0].Data.Data);
+                                        Image image = Image.FromStream(ms);
+                                        pictureBox.Image = image;
+                                        pictureBox.SizeMode = PictureBoxSizeMode.StretchImage;
+                                        pictureBox.Size = new Size(97, 75);
+                                        pictureBox.Location = new Point(10, 3);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        private ERS_Panel _selectedPanel = null;
+        private void pnlsarki_MouseLeave(object sender, EventArgs e)
+        {
+            ERS_Panel panel = (ERS_Panel)sender;
+            if (_selectedPanel == null || !_selectedPanel.Equals(panel))
+            {
+                panel.StartColor = System.Drawing.Color.DimGray;
+                panel.EndColor = System.Drawing.Color.Black;
+            }
+            else
+            {
+                panel.StartColor = System.Drawing.Color.DarkRed;
+                panel.EndColor = System.Drawing.Color.Black;
+            }
+        }
+        private void pnlsarki_MouseEnter(object sender, EventArgs e)
+        {
+            ERS_Panel panel = (ERS_Panel)sender;
+            if (sender is ERS_Panel)
+            {
+                if (_selectedPanel != null && !_selectedPanel.Equals(panel))
+                {
+                    panel.StartColor = System.Drawing.Color.DimGray;
+                    panel.EndColor = System.Drawing.Color.Black;
+                }
+            }
+        }
+        private void pnlsarki_Click(object sender, EventArgs e)
+        {
+            ERS_Panel panel = (ERS_Panel)sender;
+            string songname = panel.Controls.OfType<Label>().FirstOrDefault().Text;
+            string[] files = Directory.GetFiles(@"C:\Müzikler\", "*.mp3", SearchOption.AllDirectories)
+                .Where(s => s.Contains(songname)).ToArray();
+            if (files.Length > 0)
+            {
+                // Seçilen şarkıyı çal
+                string songPath = files[0];
+                axWindowsMediaPlayer1.URL = songPath;
+                axWindowsMediaPlayer1.Ctlcontrols.play();
+            }
+
+            // Seçili paneli değiştir
+            if (_selectedPanel != null)
+            {
+                _selectedPanel.StartColor = System.Drawing.Color.DimGray;
+                _selectedPanel.EndColor = System.Drawing.Color.Black;
+                _selectedPanel.Selected = false;
+            }
+            panel.StartColor = System.Drawing.Color.Salmon;
+            panel.EndColor = System.Drawing.Color.Black;
+            panel.Selected = true;
+            _selectedPanel = panel;
+        }
+        private void PerformClick(Control ctrl)
+        {
+            btnara.Focus();
+            btnara.PerformClick();
+        }
+        private void TxtKlasör_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == (char)Keys.Enter)
+            {
+                e.Handled = true;
+                PerformClick(btnara);
+                TxtKlasör.Focus();
+            }
+        }
+        private void btnileri_Click(object sender, EventArgs e)
+        {
+            if (TbCntrl.SelectedTab != null && TbCntrl.SelectedTab.Controls.Count > 0)
+            {
+                ListBox listBox = (ListBox)TbCntrl.SelectedTab.Controls[0];
+
+                if (listBox.SelectedIndex < listBox.Items.Count - 1)
+                {
+                    listBox.SelectedIndex++;
+                    string selectedSongPath = System.IO.Path.Combine(@"C:\" + TxtKlasör.Text, TbCntrl.SelectedTab.Text, listBox.SelectedItem.ToString());
+                    axWindowsMediaPlayer1.URL = selectedSongPath;
+                    isplaying = true;
+                }
+            }
+        }
+        private void button1_Click(object sender, EventArgs e)
+        {
+            if (TbCntrl.SelectedTab != null && TbCntrl.SelectedTab.Controls.Count > 0)
+            {
+                ListBox listBox = (ListBox)TbCntrl.SelectedTab.Controls[0];
+
+                if (listBox.SelectedIndex > 0)
+                {
+                    listBox.SelectedIndex--;
+                    string selectedSongPath = System.IO.Path.Combine(@"C:\" + TxtKlasör.Text, TbCntrl.SelectedTab.Text, listBox.SelectedItem.ToString());
+                    axWindowsMediaPlayer1.URL = selectedSongPath;
+                    isplaying = true;
+                }
+            }
+        }
+        private void TbCntrl_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            int selectedTabIndex = TbCntrl.SelectedIndex;
+            Panel4.Controls.Clear();
+            ListBox currentListBox = (ListBox)TbCntrl.TabPages[selectedTabIndex].Controls[0];
+            int spacing = 4; // boşluk miktarı
+            for (int k = 0; k < currentListBox.Items.Count; k++)
+            {
+                PictureBox pbsanatci = new PictureBox();
+                Label baslik = new Label();
+                ERS_Panel pnlsarki = new ERS_Panel();
+                pnlsarki.Angle = 180;
+                pnlsarki.Location = new System.Drawing.Point(20, k * (pnlsarki.Height + spacing));
+                pnlsarki.Size = new System.Drawing.Size(1045, 86);
+                pnlsarki.StartColor = System.Drawing.Color.DimGray;
+                pnlsarki.Click += new EventHandler(pnlsarki_Click);
+                pnlsarki.MouseEnter += new EventHandler(pnlsarki_MouseEnter);
+                pnlsarki.MouseLeave += new EventHandler(pnlsarki_MouseLeave);
+                pnlsarki.EndColor = System.Drawing.Color.Black;
+                pnlsarki.Cursor = Cursors.Hand;
+                pbsanatci.BackColor = System.Drawing.Color.Black;
+                pbsanatci.Size = new Size(76, 76);
+                pbsanatci.BackColor = System.Drawing.Color.Transparent;
+                pbsanatci.SizeMode = PictureBoxSizeMode.StretchImage;
+                baslik.Text = currentListBox.Items[k].ToString();
+                BunifuElipse elips = new BunifuElipse();
+                elips.TargetControl = pnlsarki;
+                elips.ElipseRadius = 30;
+                baslik.AutoSize = true;
+                baslik.ForeColor = System.Drawing.Color.White;
+                baslik.BackColor = System.Drawing.Color.Transparent;
+                baslik.Font = new Font("Georgia", 12, FontStyle.Regular);
+                baslik.Location = new Point(pbsanatci.Right + 40, (pnlsarki.Height - baslik.Height) / 2);
+                pnlsarki.Controls.Add(baslik);
+                pnlsarki.Controls.Add(pbsanatci);
+                Panel4.Controls.Add(pnlsarki);
+                foreach (Control control in Panel4.Controls)
+                {
+                    if (control is ERS_Panel)
+                    {
+                        ERS_Panel panel = (ERS_Panel)control;
+                        foreach (Control subControl in panel.Controls)
+                        {
+                            if (subControl is PictureBox)
+                            {
+                                PictureBox pictureBox = (PictureBox)subControl;
+                                string songname = panel.Controls.OfType<Label>().FirstOrDefault(lbl => !string.IsNullOrEmpty(lbl.Text))?.Text;
+                                if (songname != null)
+                                {
+                                    string[] files = Directory.GetFiles(@"C:\Müzikler\", "*.mp3", SearchOption.AllDirectories)
+                                        .Where(s => s.Contains(songname)).ToArray();
+                                    if (files.Length > 0)
+                                    {
+                                        TagLib.File file = TagLib.File.Create(files[0]);
+                                        MemoryStream ms = new MemoryStream(file.Tag.Pictures[0].Data.Data);
+                                        Image image = Image.FromStream(ms);
+                                        pictureBox.Image = image;
+                                        pictureBox.SizeMode = PictureBoxSizeMode.StretchImage;
+                                        pictureBox.Size = new Size(97, 75);
+                                        pictureBox.Location = new Point(10, 3);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }     
+        private void taşıma1_MouseEnter(object sender, EventArgs e)
+        {
+            taşıma1.BackColor = Color.Gray;
+        }
+
+        private void taşıma1_MouseLeave(object sender, EventArgs e)
+        {
+            taşıma1.BackColor = Color.DimGray;
+        }
+        private void btnküçült_Click(object sender, EventArgs e)
+        {
+            if (this.WindowState == FormWindowState.Normal)
+            {
+                this.WindowState = FormWindowState.Maximized;
+                tmralbumkapak.Start();
+                tmralbumkapak.Enabled = true;
+            }
+            else
+            {
+                this.WindowState = FormWindowState.Normal;
+                tmralbumkapak.Stop();
+                tmralbumkapak.Enabled = false;
+            }
+        }
+        PictureBox pbx = new PictureBox();
+        private void tmralbumkapak_Tick(object sender, EventArgs e)
+        {
+            pbx.Image = pbAlbumCover.Image;
+            pbx.Size = new Size(700, 700);
+            pbx.Location = new Point(70, 150);
+            pbx.SizeMode = PictureBoxSizeMode.StretchImage;
+            panel3.Controls.Add(pbx);
+        }   
+        private void taşıma1_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+           
+        }
+        private void ERS_SizeChanged(object sender, EventArgs e)
+        {
+            if (this.WindowState == FormWindowState.Maximized)
+            {
+                tmralbumkapak.Start();
+                tmralbumkapak.Enabled = true;
+            }
+            else
+            {
+                tmralbumkapak.Stop();
+                tmralbumkapak.Enabled = false;
+            }
+        }
+    }
+}
